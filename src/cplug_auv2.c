@@ -15,6 +15,24 @@ static const double kAUDefaultSampleRate        = 44100.0;
 
 #define CPLUG_ARRSIZE(a) (sizeof(a) / sizeof(a[0]))
 
+// Helper functions to handle Logic Pro phantom bus compatibility
+// When plugin has 0 input buses, we force 1 for Logic Pro. This phantom bus
+// should report as stereo (2 channels) instead of 0 channels which is invalid.
+static uint32_t auv2_getInputBusChannelCount(void* userPlugin, uint32_t bus_idx)
+{
+    uint32_t realBusCount = cplug_getNumInputBusses(userPlugin);
+    uint32_t channels = cplug_getInputBusChannelCount(userPlugin, bus_idx);
+    if (realBusCount == 0 && channels == 0)
+        return 2;
+    return channels;
+}
+
+static uint32_t auv2_getOutputBusChannelCount(void* userPlugin, uint32_t bus_idx)
+{
+    uint32_t channels = cplug_getOutputBusChannelCount(userPlugin, bus_idx);
+    return channels > 0 ? channels : 2;
+}
+
 static const char* _cplugLookup2Str(SInt16 selector)
 {
     static const struct
@@ -367,9 +385,9 @@ OSStatus AUMethodGetPropertyInfo(
         if (inScope == kAudioUnitScope_Global)
             num = 1;
         else if (inScope == kAudioUnitScope_Input)
-            num = cplug_getInputBusChannelCount(auv2->userPlugin, inElement);
+            num = auv2_getInputBusChannelCount(auv2->userPlugin, inElement);
         else if (inScope == kAudioUnitScope_Output)
-            num = cplug_getOutputBusChannelCount(auv2->userPlugin, inElement);
+            num = auv2_getOutputBusChannelCount(auv2->userPlugin, inElement);
 
         CPLUG_LOG_ASSERT_RETURN(num != 0u, kAudioUnitErr_InvalidProperty);
         CPLUG_SAFE_SET_PTR(outDataSize, sizeof(AUChannelInfo) * num);
@@ -681,9 +699,9 @@ static OSStatus AUMethodGetProperty(
 
         int nChannels = 2;
         if (inScope == kAudioUnitScope_Input)
-            nChannels = cplug_getInputBusChannelCount(auv2->userPlugin, inElement);
+            nChannels = auv2_getInputBusChannelCount(auv2->userPlugin, inElement);
         if (inScope == kAudioUnitScope_Output)
-            nChannels = cplug_getOutputBusChannelCount(auv2->userPlugin, inElement);
+            nChannels = auv2_getOutputBusChannelCount(auv2->userPlugin, inElement);
 
         desc->mSampleRate       = auv2->sampleRate;
         desc->mFormatID         = kAudioFormatLinearPCM;
@@ -731,8 +749,8 @@ static OSStatus AUMethodGetProperty(
         AUChannelInfo* infoArr = (AUChannelInfo*)outData;
         for (int i = 0; i < *ioDataSize / sizeof(*infoArr); i++)
         {
-            int inChannels         = cplug_getInputBusChannelCount(auv2->userPlugin, i);
-            int outChannels        = cplug_getOutputBusChannelCount(auv2->userPlugin, i);
+            int inChannels         = auv2_getInputBusChannelCount(auv2->userPlugin, i);
+            int outChannels        = auv2_getOutputBusChannelCount(auv2->userPlugin, i);
             infoArr[i].inChannels  = inChannels;
             infoArr[i].outChannels = outChannels;
         }
@@ -872,9 +890,9 @@ static OSStatus AUMethodGetProperty(
         {
             int nChannels = 0;
             if (inScope == kAudioUnitScope_Input)
-                nChannels = cplug_getInputBusChannelCount(auv2->userPlugin, inElement);
+                nChannels = auv2_getInputBusChannelCount(auv2->userPlugin, inElement);
             else
-                nChannels = cplug_getOutputBusChannelCount(auv2->userPlugin, inElement);
+                nChannels = auv2_getOutputBusChannelCount(auv2->userPlugin, inElement);
 
             if (nChannels > 0)
             {
@@ -969,10 +987,10 @@ static OSStatus AUMethodSetProperty(
             nChannels = 1;
             break;
         case kAudioUnitScope_Input:
-            nChannels = cplug_getInputBusChannelCount(auv2->userPlugin, inElement);
+            nChannels = auv2_getInputBusChannelCount(auv2->userPlugin, inElement);
             break;
         case kAudioUnitScope_Output:
-            nChannels = cplug_getOutputBusChannelCount(auv2->userPlugin, inElement);
+            nChannels = auv2_getOutputBusChannelCount(auv2->userPlugin, inElement);
             break;
         default:
             break;
