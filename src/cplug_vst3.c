@@ -1737,9 +1737,6 @@ bool VST3ProcessContextTranslator_enqueueEvent(CplugProcessContext* ctx, const C
         Steinberg_tresult result = queue->lpVtbl->addPoint(queue, frameIdx, normalised, &idx);
         return result == Steinberg_kResultOk;
     }
-    // TODO: Get this or similar working in Bitwig
-    // The hope is that we can relay MIDI/note on/off events to FX plugins later in the FX chain
-    /*
     case CPLUG_EVENT_MIDI:
     {
         if (vst3ctx->data->outputEvents && vst3ctx->data->outputEvents->lpVtbl->addEvent)
@@ -1778,7 +1775,7 @@ bool VST3ProcessContextTranslator_enqueueEvent(CplugProcessContext* ctx, const C
             }
         }
     }
-    */
+    break;
     default:
         break;
     }
