@@ -858,6 +858,37 @@ static OSStatus AUMethodGetProperty(
         *(UInt64*)outData = (UInt64)auv2;
         break;
 
+    case kAudioUnitProperty_SupportedChannelLayoutTags:
+    {
+        AudioChannelLayoutTag* layouts = (AudioChannelLayoutTag*)outData;
+        UInt32 maxLayouts = *ioDataSize / sizeof(AudioChannelLayoutTag);
+        UInt32 numLayouts = 0;
+
+        if (inScope == kAudioUnitScope_Input || inScope == kAudioUnitScope_Output)
+        {
+            int nChannels = 0;
+            if (inScope == kAudioUnitScope_Input)
+                nChannels = cplug_getInputBusChannelCount(auv2->userPlugin, inElement);
+            else
+                nChannels = cplug_getOutputBusChannelCount(auv2->userPlugin, inElement);
+
+            if (nChannels > 0 && maxLayouts > 0)
+            {
+                if (nChannels == 1)
+                    layouts[numLayouts++] = kAudioChannelLayoutTag_Mono;
+                if (nChannels == 2 && maxLayouts > numLayouts)
+                    layouts[numLayouts++] = kAudioChannelLayoutTag_Stereo;
+                if (nChannels == 6 && maxLayouts > numLayouts)
+                    layouts[numLayouts++] = kAudioChannelLayoutTag_5_1;
+                if (nChannels == 8 && maxLayouts > numLayouts)
+                    layouts[numLayouts++] = kAudioChannelLayoutTag_7_1;
+            }
+        }
+
+        *ioDataSize = numLayouts * sizeof(AudioChannelLayoutTag);
+        break;
+    }
+
     default:
         result = kAudioUnitErr_InvalidProperty;
         break;
