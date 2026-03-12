@@ -481,9 +481,14 @@ OSStatus AUMethodGetPropertyInfo(
         break;
 
     case kAudioUnitProperty_CocoaUI:
+#if CPLUG_WANT_GUI
         CPLUG_SAFE_SET_PTR(outDataSize, sizeof(AudioUnitCocoaViewInfo));
         CPLUG_SAFE_SET_PTR(outWritable, true);
         break;
+#else
+        result = kAudioUnitErr_InvalidProperty;
+        break;
+#endif
 
     case kAudioUnitProperty_ParameterClumpName:
         CPLUG_SAFE_SET_PTR(outDataSize, sizeof(AudioUnitParameterNameInfo));
@@ -782,10 +787,9 @@ static OSStatus AUMethodGetProperty(
 
     case kAudioUnitProperty_CocoaUI:
     {
-#ifdef CPLUG_WANT_GUI
+#if CPLUG_WANT_GUI
 #define CPLUG_AUV2_MAKE_STRING_(str) #str
 #define CPLUG_AUV2_MAKE_STRING(str)  CPLUG_AUV2_MAKE_STRING_(str)
-
         AudioUnitCocoaViewInfo* info = (AudioUnitCocoaViewInfo*)outData;
         // AUv2 docs tell you to bundle your Cocoa GUI as a separate App bundle nested inside your .component bundle.
         // For most wrapper libraries, including CPLUG, this is s̶t̶u̶p̶i̶d̶ ̶a̶n̶d̶ ̶a̶n̶n̶o̶y̶i̶n̶g̶ intrusive to our build system.
@@ -796,6 +800,9 @@ static OSStatus AUMethodGetProperty(
         info->mCocoaAUViewClass[0] =
             CFStringCreateWithCString(0, CPLUG_AUV2_MAKE_STRING(CPLUG_AUV2_VIEW_CLASS), kCFStringEncodingUTF8);
         CFRelease(bundleID);
+        break;
+#else
+        result = kAudioUnitErr_InvalidProperty;
         break;
 #endif
     }
