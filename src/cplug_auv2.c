@@ -876,12 +876,8 @@ static OSStatus AUMethodGetProperty(
             {
                 if (nChannels == 1)
                     layouts[numLayouts++] = kAudioChannelLayoutTag_Mono;
-                if (nChannels == 2 && maxLayouts > numLayouts)
+                else
                     layouts[numLayouts++] = kAudioChannelLayoutTag_Stereo;
-                if (nChannels == 6 && maxLayouts > numLayouts)
-                    layouts[numLayouts++] = kAudioChannelLayoutTag_5_1;
-                if (nChannels == 8 && maxLayouts > numLayouts)
-                    layouts[numLayouts++] = kAudioChannelLayoutTag_7_1;
             }
         }
 
