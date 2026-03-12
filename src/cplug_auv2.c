@@ -446,6 +446,8 @@ OSStatus AUMethodGetPropertyInfo(
         if (inScope == kAudioUnitScope_Input)
         {
             num = cplug_getNumInputBusses(auv2->userPlugin);
+            if (num < 1)
+                num = 1;  // Logic Pro requires at least 1 input bus
             if (num != auv2->numInputBusNames)
             {
                 AUv2ReleaseStringArray(auv2->inputBusNames, auv2->numInputBusNames);
