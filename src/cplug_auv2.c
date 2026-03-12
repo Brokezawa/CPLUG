@@ -442,30 +442,27 @@ OSStatus AUMethodGetPropertyInfo(
     case kAudioUnitProperty_SupportedChannelLayoutTags:
     {
         CPLUG_LOG_ASSERT_RETURN(inScope != kAudioUnitScope_Global, kAudioUnitErr_InvalidScope);
-        UInt32 num = 0;
+        
+        UInt32 numBusses = 0;
         if (inScope == kAudioUnitScope_Input)
         {
-            num = cplug_getNumInputBusses(auv2->userPlugin);
-            if (num < 1)
-                num = 1;  // Logic Pro requires at least 1 input bus
-            if (num != auv2->numInputBusNames)
-            {
-                AUv2ReleaseStringArray(auv2->inputBusNames, auv2->numInputBusNames);
-                auv2->inputBusNames = (CFStringRef*)realloc(auv2->inputBusNames, num * sizeof(*auv2->inputBusNames));
-            }
+            numBusses = cplug_getNumInputBusses(auv2->userPlugin);
+            if (numBusses < 1)
+                numBusses = 1;  // Logic Pro requires at least 1 input bus
         }
         else if (inScope == kAudioUnitScope_Output)
         {
-            num = cplug_getNumOutputBusses(auv2->userPlugin);
-            if (num != auv2->numOutputBusNames)
-            {
-                AUv2ReleaseStringArray(auv2->outputBusNames, auv2->numOutputBusNames);
-                auv2->outputBusNames = (CFStringRef*)realloc(auv2->outputBusNames, num * sizeof(*auv2->outputBusNames));
-            }
+            numBusses = cplug_getNumOutputBusses(auv2->userPlugin);
+        }
+        else
+        {
+            return kAudioUnitErr_InvalidScope;
         }
 
-        CPLUG_LOG_ASSERT_RETURN(num != 0, kAudioUnitErr_InvalidProperty);
-        CPLUG_SAFE_SET_PTR(outDataSize, (UInt32)sizeof(AudioChannelLayoutTag) * num);
+        if (numBusses == 0)
+            return kAudioUnitErr_InvalidProperty;
+
+        CPLUG_SAFE_SET_PTR(outDataSize, (UInt32)sizeof(AudioChannelLayoutTag) * numBusses);
         break;
     }
 
