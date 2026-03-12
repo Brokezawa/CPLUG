@@ -515,14 +515,18 @@ static bool CLAPPlugin_init(const struct clap_plugin* plugin)
     clap->host_latency = (const clap_host_latency_t*)clap->host->get_extension(clap->host, CLAP_EXT_LATENCY);
     clap->host_tail    = (const clap_host_tail_t*)clap->host->get_extension(clap->host, CLAP_EXT_TAIL);
     clap->host_state   = (const clap_host_state_t*)clap->host->get_extension(clap->host, CLAP_EXT_STATE);
+#if CPLUG_WANT_GUI
     clap->host_gui     = (const clap_host_gui_t*)clap->host->get_extension(clap->host, CLAP_EXT_GUI);
+#endif
 
     CPLUG_LOG_ASSERT(clap->host_audio_ports != NULL);
     CPLUG_LOG_ASSERT(clap->host_params != NULL);
     CPLUG_LOG_ASSERT(clap->host_latency != NULL);
     CPLUG_LOG_ASSERT(clap->host_tail != NULL);
     CPLUG_LOG_ASSERT(clap->host_state != NULL);
+#if CPLUG_WANT_GUI
     CPLUG_LOG_ASSERT(clap->host_gui != NULL);
+#endif
 
     return true;
 }
