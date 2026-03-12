@@ -869,12 +869,19 @@ static OSStatus AUMethodGetProperty(
             else
                 nChannels = cplug_getOutputBusChannelCount(auv2->userPlugin, inElement);
 
-            if (nChannels > 0 && maxLayouts > 0)
+            if (nChannels > 0)
             {
-                if (nChannels == 1)
-                    layouts[numLayouts++] = kAudioChannelLayoutTag_Mono;
+                if (maxLayouts > 0)
+                {
+                    if (nChannels == 1)
+                        layouts[numLayouts++] = kAudioChannelLayoutTag_Mono;
+                    else
+                        layouts[numLayouts++] = kAudioChannelLayoutTag_Stereo;
+                }
                 else
-                    layouts[numLayouts++] = kAudioChannelLayoutTag_Stereo;
+                {
+                    numLayouts = 1;
+                }
             }
         }
 
