@@ -1756,7 +1756,7 @@ bool VST3ProcessContextTranslator_enqueueEvent(CplugProcessContext* ctx, const C
                 noteOn->noteId   = event->midi.data1;
                 if (noteOn->velocity > 1)
                     noteOn->velocity = 1;
-                Steinberg_tresult result = vst3ctx->data->outputEvents->lpVtbl->addEvent(vst3ctx->data, &vst3Midi);
+                Steinberg_tresult result = vst3ctx->data->outputEvents->lpVtbl->addEvent(vst3ctx->data->outputEvents, &vst3Midi);
                 return result == Steinberg_kResultOk;
             }
             else if ((event->midi.status & 0xf0) == 0x80)
@@ -1770,7 +1770,7 @@ bool VST3ProcessContextTranslator_enqueueEvent(CplugProcessContext* ctx, const C
                 noteOff->noteId   = event->midi.data1;
                 if (noteOff->velocity > 1)
                     noteOff->velocity = 1;
-                Steinberg_tresult result = vst3ctx->data->outputEvents->lpVtbl->addEvent(vst3ctx->data, &vst3Midi);
+                Steinberg_tresult result = vst3ctx->data->outputEvents->lpVtbl->addEvent(vst3ctx->data->outputEvents, &vst3Midi);
                 return result == Steinberg_kResultOk;
             }
         }
