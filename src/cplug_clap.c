@@ -180,8 +180,7 @@ bool CLAPExtState_load(const clap_plugin_t* plugin, const clap_istream_t* stream
 {
     cplug_log("CLAPExtState_load %p", stream);
     CLAPPlugin* clap = (CLAPPlugin*)plugin->plugin_data;
-    cplug_loadState(clap->userPlugin, stream, (cplug_readProc)stream->read);
-    return true;
+    return cplug_loadState(clap->userPlugin, stream, (cplug_readProc)stream->read);
 }
 
 static const clap_plugin_state_t s_clap_state = {
@@ -267,9 +266,24 @@ bool CLAPExtParams_text_to_value(
 
 void CLAPExtParams_flush(const clap_plugin_t* plugin, const clap_input_events_t* in, const clap_output_events_t* out)
 {
-    cplug_log("[WARNING: NOT SUPPORTED] CLAPExtParams_flush => %p %p", in, out);
-    // NOTE: Bitwig & Reaper won't actually call this method if you process all your events in the process callback
-    // We include this method anyway to prevent any segfault that may occur in future from not having it.
+    CLAPPlugin* clap = (CLAPPlugin*)plugin->plugin_data;
+    
+    if (!in) return;
+    
+    uint32_t event_count = in->size(in);
+    for (uint32_t i = 0; i < event_count; ++i)
+    {
+        const clap_event_header_t* hdr = in->get(in, i);
+        
+        if (hdr->space_id != CLAP_CORE_EVENT_SPACE_ID)
+            continue;
+        
+        if (hdr->type == CLAP_EVENT_PARAM_VALUE)
+        {
+            const clap_event_param_value_t* ev = (const clap_event_param_value_t*)hdr;
+            cplug_setParameterValue(clap->userPlugin, ev->param_id, ev->value);
+        }
+    }
 }
 
 static const clap_plugin_params_t s_clap_params = {
@@ -645,6 +659,14 @@ bool ClapProcessContext_dequeueEvent(struct CplugProcessContext* ctx, CplugEvent
     {
         event->processAudio.type     = CPLUG_EVENT_PROCESS_AUDIO;
         event->processAudio.endFrame = event_time;
+        return true;
+    }
+
+    // Only process events from the CLAP core event space
+    if (hdr->space_id != CLAP_CORE_EVENT_SPACE_ID)
+    {
+        event->type = CPLUG_EVENT_UNHANDLED_EVENT;
+        translator->eventIdx++;
         return true;
     }
 

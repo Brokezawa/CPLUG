@@ -228,7 +228,7 @@ CPLUG_API void cplug_saveState(void* userPlugin, const void* stateCtx, cplug_wri
 
 // Returns 0 if all bytes are read, -1 on error, and 'maxBytesToRead' when there are remaining bytes to read
 typedef int64_t (*cplug_readProc)(const void* stateCtx, void* readPos, size_t maxBytesToRead);
-CPLUG_API void cplug_loadState(void* userPlugin, const void* stateCtx, cplug_readProc readProc);
+CPLUG_API bool cplug_loadState(void* userPlugin, const void* stateCtx, cplug_readProc readProc);
 
 // AUv2 hacks. Unfortunately Apple's API designs are offensive leaky abstractions.
 enum
