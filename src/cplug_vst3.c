@@ -1182,6 +1182,12 @@ static uint32_t SMTG_STDMETHODCALLTYPE VST3Controller_release(void* const self)
 
     if (refcount == 0)
     {
+        if (vst3->controller.componentHandler != NULL)
+        {
+            vst3->controller.componentHandler->lpVtbl->release(vst3->controller.componentHandler);
+            vst3->controller.componentHandler = NULL;
+        }
+
         // should call _cplug_tryDeleteVST3Plugin() from IMidiMapping & INoteExpressionController
         vst3->midiMapping.lpVtbl->release(&vst3->midiMapping);
         vst3->noteExpression.lpVtbl->release(&vst3->noteExpression);
@@ -1455,13 +1461,22 @@ VST3Controller_setComponentHandler(void* self, Steinberg_Vst_IComponentHandler* 
     cplug_log("%s => %p %p", __FUNCTION__, self, handler);
     // NOTE: Ableton 10, FL Studio & Cubase have been spotted trying to pass NULL here.
     VST3Plugin* const vst3 = _cplug_pointerShiftController(self);
+    if (handler == vst3->controller.componentHandler)
+        return Steinberg_kResultOk;
     _cplug_IPtr_set((Steinberg_FUnknown**)&vst3->controller.componentHandler, (Steinberg_FUnknown*)handler);
     return Steinberg_kResultOk;
 }
 
 static Steinberg_IPlugView* SMTG_STDMETHODCALLTYPE VST3Controller_createView(void* self, const char* name)
 {
-    cplug_log("%s => %p %s", __FUNCTION__, self, name);
+    const char* safeName = name ? name : "(null)";
+    cplug_log("%s => %p %s", __FUNCTION__, self, safeName);
+
+    if (name == NULL || strcmp(name, Steinberg_Vst_ViewType_kEditor) != 0)
+    {
+        cplug_log("[WARNING] VST3Controller_createView: unsupported view name '%s'", safeName);
+        return NULL;
+    }
 
     // NOTE: VST3 does not appear to have any kind of hide feature.
     // This means windows need to constantly be created & destroyed.
@@ -2180,7 +2195,11 @@ static Steinberg_tresult SMTG_STDMETHODCALLTYPE VST3Component_terminate(void* co
     cplug_destroyPlugin(vst3->userPlugin);
     vst3->userPlugin = NULL;
     _cplug_IPtr_set((Steinberg_FUnknown**)&vst3->host, NULL);
-    _cplug_IPtr_set((Steinberg_FUnknown**)&vst3->controller.componentHandler, NULL);
+    if (vst3->controller.componentHandler)
+    {
+        vst3->controller.componentHandler->lpVtbl->release(vst3->controller.componentHandler);
+        vst3->controller.componentHandler = NULL;
+    }
 
     return Steinberg_kResultOk;
 }

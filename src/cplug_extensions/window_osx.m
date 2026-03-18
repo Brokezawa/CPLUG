@@ -269,6 +269,8 @@ PWEvent pwTranslateMouseEvent(PW_CLASS* pw, NSEvent* event)
 
 - (void)viewDidMoveToWindow
 {
+    [super viewDidMoveToWindow];
+
     NSWindow* window = self.window;
 
     if (window && gui == NULL)
@@ -298,20 +300,20 @@ PWEvent pwTranslateMouseEvent(PW_CLASS* pw, NSEvent* event)
         [center addObserver:self
                    selector:@selector(parentWindowDidResize)
                        name:NSWindowDidResizeNotification
-                     object:nil];
+                     object:window];
         [center addObserver:self
                    selector:@selector(parentWindowStartResize)
                        name:NSWindowWillStartLiveResizeNotification
-                     object:nil];
+                     object:window];
         [center addObserver:self
                    selector:@selector(parentWindowEndResize)
                        name:NSWindowDidEndLiveResizeNotification
-                     object:nil];
+                     object:window];
 
         [center addObserver:self
                    selector:@selector(parentWindowLostKeyboardFocus)
                        name:NSWindowDidResignKeyNotification
-                     object:nil];
+                     object:window];
 
         [window makeFirstResponder:self];
 
@@ -320,6 +322,8 @@ PWEvent pwTranslateMouseEvent(PW_CLASS* pw, NSEvent* event)
         self->keyEventMonitor =
             [NSEvent addLocalMonitorForEventsMatchingMask:(NSEventMaskKeyDown | NSEventMaskKeyUp)
                                                   handler:^NSEvent* _Nullable(NSEvent* _Nonnull event) {
+                                                    if (event.window != self.window)
+                                                        return event;
                                                     // NOTE: key events may still be in the queue after the GUI is
                                                     // destroyed
                                                     if (self->gui == NULL)
@@ -350,8 +354,6 @@ PWEvent pwTranslateMouseEvent(PW_CLASS* pw, NSEvent* event)
 
         [self setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
     }
-
-    [super viewDidMoveToWindow];
 }
 
 - (void)removeFromSuperview
@@ -469,6 +471,8 @@ PWEvent pwTranslateMouseEvent(PW_CLASS* pw, NSEvent* event)
 
 - (void)parentWindowStartResize
 {
+    if (!gui)
+        return;
     if (self.window)
     {
         NSRect rect            = self.window.frame;
@@ -481,6 +485,8 @@ PWEvent pwTranslateMouseEvent(PW_CLASS* pw, NSEvent* event)
 
 - (void)parentWindowEndResize
 {
+    if (!gui)
+        return;
     self->pwResizeFlags = PW_FLAG_RESIZE_UNKNOWN;
     const PWEvent event = {.type = PW_EVENT_RESIZE_END, .gui = self->gui};
     pwSendEvent(&event);
