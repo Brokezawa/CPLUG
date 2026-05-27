@@ -463,7 +463,7 @@ void cplug_saveState(void* userPlugin, const void* stateCtx, cplug_writeProc wri
     writeProc(stateCtx, state, sizeof(state));
 }
 
-void cplug_loadState(void* userPlugin, const void* stateCtx, cplug_readProc readProc)
+bool cplug_loadState(void* userPlugin, const void* stateCtx, cplug_readProc readProc)
 {
     MyPlugin* plugin = (MyPlugin*)userPlugin;
 
@@ -471,6 +471,8 @@ void cplug_loadState(void* userPlugin, const void* stateCtx, cplug_readProc read
 
     // If your plugin has added/removed parameters, requesting for more data then you actually expect may be a good idea
     int64_t bytesRead = readProc(stateCtx, state, sizeof(state));
+    if (bytesRead < 0)
+        return false;
 
     for (int i = 0; i < bytesRead / sizeof(state[0]); i++)
     {
@@ -482,6 +484,8 @@ void cplug_loadState(void* userPlugin, const void* stateCtx, cplug_readProc read
             sendParamEventFromMain(plugin, CPLUG_EVENT_PARAM_CHANGE_UPDATE, state[i].paramId, state[i].value);
         }
     }
+
+    return true;
 }
 
 void sendParamEventFromMain(MyPlugin* plugin, uint32_t type, uint32_t paramId, double value)
