@@ -1015,16 +1015,23 @@ void cplug_checkSize(void* userGUI, uint32_t* width, uint32_t* height)
     if (pw.window.inLiveResize)
     {
         NSRect rect = pw.window.frame;
-        if (rect.origin.x != pw->resizeStartFrame.origin.x)
+        if (rect.origin.x != pw->resizeStartFrame.origin.x) {
+            pw->pwResizeFlags &= ~PW_FLAG_RESIZE_RIGHT;
             pw->pwResizeFlags |= PW_FLAG_RESIZE_LEFT;
+        } else if (rect.size.width != pw->resizeStartFrame.size.width) {
+            pw->pwResizeFlags &= ~PW_FLAG_RESIZE_LEFT;
+            pw->pwResizeFlags |= PW_FLAG_RESIZE_RIGHT;
+        }
+        
         // You may blindly assume X:0,Y:0 to be the top right of your screen, but Apple is here to keep you on your toes
         // One of the bizarre quirks of Cocoa is they consider the origin point of X:0,Y:0 to the bottom left.
-        if (rect.origin.y == pw->resizeStartFrame.origin.y && rect.size.height != pw->resizeStartFrame.size.height)
-            pw->pwResizeFlags |= PW_FLAG_RESIZE_TOP;
-        if (rect.origin.x == pw->resizeStartFrame.origin.x && rect.size.width != pw->resizeStartFrame.size.width)
-            pw->pwResizeFlags |= PW_FLAG_RESIZE_RIGHT;
-        if (rect.origin.y != pw->resizeStartFrame.origin.y)
+        if (rect.origin.y != pw->resizeStartFrame.origin.y) {
+            pw->pwResizeFlags &= ~PW_FLAG_RESIZE_TOP;
             pw->pwResizeFlags |= PW_FLAG_RESIZE_BOTTOM;
+        } else if (rect.size.height != pw->resizeStartFrame.size.height) {
+            pw->pwResizeFlags &= ~PW_FLAG_RESIZE_BOTTOM;
+            pw->pwResizeFlags |= PW_FLAG_RESIZE_TOP;
+        }
     }
 
     pwAssertValidResizeFlags(pw->pwResizeFlags);
