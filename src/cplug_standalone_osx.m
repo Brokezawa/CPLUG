@@ -327,6 +327,8 @@ OSStatus STAND_audioDeviceChangeListener(
     [g_window setReleasedWhenClosed:NO];
     [g_window makeKeyAndOrderFront:nil];
     [g_window setTitle:@(CPLUG_PLUGIN_NAME)];
+    // Force content size so tiling WMs (Aerospace, yabai, Amethyst) respect it
+    [g_window setContentSize:NSMakeSize(guiWidth, guiHeight)];
 
     [g_window setContentView:[[NSView alloc] init]];
     [g_window setDelegate:[[WindowDelegate alloc] init]];
