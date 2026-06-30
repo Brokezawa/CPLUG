@@ -334,6 +334,9 @@ OSStatus STAND_audioDeviceChangeListener(
     [g_window setDelegate:[[WindowDelegate alloc] init]];
 
     g_plugin.setParent(g_plugin.userGUI, [g_window contentView]);
+    // Re-force content size after setParent — tiling WMs (Aerospace, yabai,
+    // Amethyst) may resize the window when the parent is attached.
+    [g_window setContentSize:NSMakeSize(guiWidth, guiHeight)];
     g_plugin.setSize(g_plugin.userGUI, guiWidth, guiHeight);
     g_plugin.setVisible(g_plugin.userGUI, true);
 
