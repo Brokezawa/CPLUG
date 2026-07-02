@@ -423,8 +423,8 @@ OSStatus AUMethodGetPropertyInfo(
 
     case kAudioUnitProperty_ParameterList:
     {
-        // Global params only, else auval starts asking for input and output parameter detials
-        CPLUG_LOG_ASSERT_RETURN(inScope == kAudioUnitScope_Global, kAudioUnitErr_InvalidScope);
+        // Accept Global, Input, and Output scopes for parameter list queries.
+        CPLUG_LOG_ASSERT_RETURN(inScope <= kAudioUnitScope_Output, kAudioUnitErr_InvalidScope);
         uint32_t numParams = cplug_getNumParameters(auv2->userPlugin);
         CPLUG_SAFE_SET_PTR(outDataSize, sizeof(AudioUnitParameterID) * numParams);
         break;
@@ -454,7 +454,7 @@ OSStatus AUMethodGetPropertyInfo(
     case kAudioUnitProperty_InPlaceProcessing:
         CPLUG_LOG_ASSERT_RETURN(inScope == kAudioUnitScope_Global, kAudioUnitErr_InvalidScope);
         CPLUG_SAFE_SET_PTR(outDataSize, sizeof(UInt32));
-        CPLUG_SAFE_SET_PTR(outDataSize, true);
+        CPLUG_SAFE_SET_PTR(outWritable, true);
         break;
 
     case kAudioUnitProperty_SupportedChannelLayoutTags:
@@ -576,7 +576,7 @@ static OSStatus AUMethodGetProperty(
         outData,
         *ioDataSize);
 
-    CPLUG_LOG_ASSERT_RETURN(inScope < kAudioUnitScope_Group, kAudioUnitErr_InvalidScope);
+    CPLUG_LOG_ASSERT_RETURN(inScope <= kAudioUnitScope_Part, kAudioUnitErr_InvalidScope);
 
     OSStatus result = noErr;
 
