@@ -5,6 +5,21 @@
 #include <cplug.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdatomic.h>
+
+typedef struct
+{
+    uint32_t type;   // CPLUG_EVENT_PARAM_CHANGE_BEGIN / UPDATE / END
+    uint32_t paramId;
+    double   value;
+} ClapGestureQueueEntry;
+
+typedef struct
+{
+    ClapGestureQueueEntry entries[256];
+    _Atomic uint32_t head; // GUI thread writes, advances
+    _Atomic uint32_t tail; // main thread reads, advances
+} ClapGestureQueue;
 
 typedef struct CLAPPlugin
 {
@@ -25,6 +40,7 @@ typedef struct CLAPPlugin
     void* userGUI;
 #endif
 
+    ClapGestureQueue gestureQueue;
 } CLAPPlugin;
 
 /////////////////////////////
@@ -264,26 +280,70 @@ bool CLAPExtParams_text_to_value(
     return true;
 }
 
+static bool ClapEventToOutput(const clap_output_events_t* out, const CplugEvent* cplugEvent, uint32_t frameIdx);
+static void ClapGestureQueue_drain(ClapGestureQueue* q, const clap_output_events_t* out);
+
+// Multi-consumer-safe gesture queue drain.
+// GUI thread produces (advances q->head), audio+main threads consume (advance q->tail
+// via CAS).  Lock-free: no locks, no syscalls, no allocations, no spinning.
+static void ClapGestureQueue_drain(ClapGestureQueue* q, const clap_output_events_t* out)
+{
+    uint32_t tail = atomic_load_explicit(&q->tail, memory_order_relaxed);
+    uint32_t head = atomic_load_explicit(&q->head, memory_order_acquire);
+
+    while (tail != head)
+    {
+        ClapGestureQueueEntry* e = &q->entries[tail];
+        CplugEvent             cplugEvent;
+
+        memset(&cplugEvent, 0, sizeof(cplugEvent));
+        cplugEvent.type            = e->type;
+        cplugEvent.parameter.id    = e->paramId;
+        cplugEvent.parameter.value = e->value;
+
+        uint32_t next = (tail + 1) % 256;
+        if (atomic_compare_exchange_weak_explicit(
+                &q->tail, &tail, next,
+                memory_order_acq_rel, memory_order_relaxed))
+        {
+            ClapEventToOutput(out, &cplugEvent, 0);
+            tail = next;
+        }
+        else
+        {
+            tail = atomic_load_explicit(&q->tail, memory_order_relaxed);
+        }
+        head = atomic_load_explicit(&q->head, memory_order_acquire);
+    }
+}
+
 void CLAPExtParams_flush(const clap_plugin_t* plugin, const clap_input_events_t* in, const clap_output_events_t* out)
 {
     CLAPPlugin* clap = (CLAPPlugin*)plugin->plugin_data;
-    
-    if (!in) return;
-    
-    uint32_t event_count = in->size(in);
-    for (uint32_t i = 0; i < event_count; ++i)
+
+    // Process input events from the host (existing path)
+    if (in)
     {
-        const clap_event_header_t* hdr = in->get(in, i);
-        
-        if (hdr->space_id != CLAP_CORE_EVENT_SPACE_ID)
-            continue;
-        
-        if (hdr->type == CLAP_EVENT_PARAM_VALUE)
+        uint32_t event_count = in->size(in);
+        for (uint32_t i = 0; i < event_count; ++i)
         {
-            const clap_event_param_value_t* ev = (const clap_event_param_value_t*)hdr;
-            cplug_setParameterValue(clap->userPlugin, ev->param_id, ev->value);
+            const clap_event_header_t* hdr = in->get(in, i);
+
+            if (hdr->space_id != CLAP_CORE_EVENT_SPACE_ID)
+                continue;
+
+            if (hdr->type == CLAP_EVENT_PARAM_VALUE)
+            {
+                const clap_event_param_value_t* ev = (const clap_event_param_value_t*)hdr;
+                cplug_setParameterValue(clap->userPlugin, ev->param_id, ev->value);
+            }
         }
     }
+
+    // Drain GUI gesture queue to output events (main-thread fallback;
+    // primary drain is in CLAPPlugin_process for synchronous delivery).
+    if (out)
+        ClapGestureQueue_drain(&clap->gestureQueue, out);
 }
 
 static const clap_plugin_params_t s_clap_params = {
@@ -456,7 +516,48 @@ static const clap_plugin_gui_t s_clap_gui = {
 // clap_plugin //
 /////////////////
 
-static void _cplug_clap_sendParamEvent(CplugHostContext* ctx, const CplugEvent* event) {}
+static void _cplug_clap_sendParamEvent(CplugHostContext* ctx, const CplugEvent* event)
+{
+    CLAPPlugin* clap = (CLAPPlugin*)((char*)ctx - offsetof(CLAPPlugin, hostContext));
+    if (event->type != CPLUG_EVENT_PARAM_CHANGE_BEGIN &&
+        event->type != CPLUG_EVENT_PARAM_CHANGE_UPDATE &&
+        event->type != CPLUG_EVENT_PARAM_CHANGE_END)
+        return;
+
+    ClapGestureQueue* q = &clap->gestureQueue;
+    uint32_t head = atomic_load_explicit(&q->head, memory_order_relaxed);
+    uint32_t next = (head + 1) % 256;
+    uint32_t tail = atomic_load_explicit(&q->tail, memory_order_acquire);
+
+    if (next == tail)
+    {
+        // Queue full: if the oldest entry is an UPDATE we can drop it to make room.
+        // Never drop a BEGIN/END gesture boundary.
+        if (q->entries[tail].type == CPLUG_EVENT_PARAM_CHANGE_UPDATE)
+        {
+            atomic_store_explicit(&q->tail, (tail + 1) % 256, memory_order_release);
+        }
+        else
+        {
+            cplug_log("ClapGestureQueue overflow, dropping event type %u", (unsigned)event->type);
+            return;
+        }
+    }
+
+    q->entries[head].type    = event->type;
+    q->entries[head].paramId = event->parameter.id;
+    q->entries[head].value   = event->parameter.value;
+    atomic_store_explicit(&q->head, next, memory_order_release);
+
+    // Trigger synchronous delivery via process() (primary drain path).
+    // When the plugin is processing, the host will call CLAPPlugin_process
+    // which drains the gesture queue to out_events inline.
+    if (clap->host->request_process)
+        clap->host->request_process(clap->host);
+    // Fallback: request flush for when the plugin is deactivated (not processing).
+    if (clap->host_params)
+        clap->host_params->request_flush(clap->host);
+}
 static void _cplug_clap_rescan(CplugHostContext* ctx, uint32_t flags)
 {
     CLAPPlugin* clap = (CLAPPlugin*)((char*)ctx - offsetof(CLAPPlugin, hostContext));
@@ -585,11 +686,8 @@ typedef struct ClapProcessContextTranslator
     uint32_t              numEvents;
 } ClapProcessContextTranslator;
 
-bool ClapProcessContext_enqueueEvent(struct CplugProcessContext* ctx, const CplugEvent* cplugEvent, uint32_t frameIdx)
+static bool ClapEventToOutput(const clap_output_events_t* out, const CplugEvent* cplugEvent, uint32_t frameIdx)
 {
-    ClapProcessContextTranslator* translator = (ClapProcessContextTranslator*)ctx;
-    const clap_process_t*         process    = translator->process;
-
     switch (cplugEvent->type)
     {
     case CPLUG_EVENT_PARAM_CHANGE_BEGIN:
@@ -602,7 +700,7 @@ bool ClapProcessContext_enqueueEvent(struct CplugProcessContext* ctx, const Cplu
         event.header.type = cplugEvent->type == CPLUG_EVENT_PARAM_CHANGE_BEGIN ? CLAP_EVENT_PARAM_GESTURE_BEGIN
                                                                                : CLAP_EVENT_PARAM_GESTURE_END;
         event.param_id    = cplugEvent->parameter.id;
-        return process->out_events->try_push(process->out_events, &event.header);
+        return out->try_push(out, &event.header);
     }
     case CPLUG_EVENT_PARAM_CHANGE_UPDATE:
     {
@@ -613,7 +711,7 @@ bool ClapProcessContext_enqueueEvent(struct CplugProcessContext* ctx, const Cplu
         event.header.type = CLAP_EVENT_PARAM_VALUE;
         event.param_id    = cplugEvent->parameter.id;
         event.value       = cplugEvent->parameter.value;
-        return process->out_events->try_push(process->out_events, &event.header);
+        return out->try_push(out, &event.header);
     }
     case CPLUG_EVENT_MIDI:
     {
@@ -627,12 +725,19 @@ bool ClapProcessContext_enqueueEvent(struct CplugProcessContext* ctx, const Cplu
         event.data[1] = cplugEvent->midi.bytes[1];
         event.data[2] = cplugEvent->midi.bytes[2];
 
-        return process->out_events->try_push(process->out_events, &event.header);
+        return out->try_push(out, &event.header);
     }
     default:
         break;
     }
     return false;
+}
+
+bool ClapProcessContext_enqueueEvent(struct CplugProcessContext* ctx, const CplugEvent* cplugEvent, uint32_t frameIdx)
+{
+    ClapProcessContextTranslator* translator = (ClapProcessContextTranslator*)ctx;
+    const clap_process_t*         process    = translator->process;
+    return ClapEventToOutput(process->out_events, cplugEvent, frameIdx);
 }
 
 bool ClapProcessContext_dequeueEvent(struct CplugProcessContext* ctx, CplugEvent* event, uint32_t frameIdx)
@@ -822,6 +927,12 @@ static clap_process_status CLAPPlugin_process(const struct clap_plugin* plugin, 
             translator.cplugContext.timeSigDenominator  = process->transport->tsig_denom;
         }
     }
+
+    // Drain GUI gesture queue to output events synchronously during the
+    // audio block.  This is the primary drain path — gesture events are
+    // delivered to the host inline so it can yield automation before the
+    // next automated PARAM_VALUE overwrites the GUI's value.
+    ClapGestureQueue_drain(&clap->gestureQueue, process->out_events);
 
     translator.cplugContext.enqueueEvent   = &ClapProcessContext_enqueueEvent;
     translator.cplugContext.dequeueEvent   = &ClapProcessContext_dequeueEvent;

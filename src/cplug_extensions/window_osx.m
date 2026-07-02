@@ -961,6 +961,8 @@ void* cplug_createGUI(CplugHostContext* hostCtx, void* userPlugin)
 #ifdef PW_METAL
     // https://developer.apple.com/documentation/metal/mtlcreatesystemdefaultdevice()?language=objc
     pw.device                  = MTLCreateSystemDefaultDevice();
+    if (pw.device == nil)
+        cplug_log("ERROR: MTLCreateSystemDefaultDevice() returned nil — Metal unavailable");
     pw.colorPixelFormat        = MTLPixelFormatBGRA8Unorm;
     pw.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
     setenv("MTL_HUD_ENABLED", "1", 1);
