@@ -416,9 +416,10 @@ PWEvent pwTranslateMouseEvent(PW_CLASS* pw, NSEvent* event)
 
 - (void)setFrameSize:(NSSize)newSize
 {
+    // Clamp to minimum 1x1 — zero-size frames crash the Metal layer.
+    if (newSize.width  < 1) newSize.width  = 1;
+    if (newSize.height < 1) newSize.height = 1;
     // handle host resize
-    PW_ASSERT(newSize.width > 0);
-    PW_ASSERT(newSize.height > 0);
     PW_ASSERT(plugin != NULL);
 
     const PWEvent event = {
@@ -1057,6 +1058,9 @@ void cplug_checkSize(void* userGUI, uint32_t* width, uint32_t* height)
 
 bool cplug_setSize(void* userGUI, uint32_t width, uint32_t height)
 {
+    // Clamp to minimum 1x1 — zero-size frames crash the Metal layer.
+    if (width  < 1) width  = 1;
+    if (height < 1) height = 1;
     PW_CLASS* pw = (PW_CLASS*)userGUI;
 
     NSSize size;
