@@ -832,6 +832,21 @@ static clap_process_status CLAPPlugin_process(const struct clap_plugin* plugin, 
     translator.eventIdx  = 0;
     translator.numEvents = process->in_events->size(process->in_events);
 
+    // Pre-process param value events: call cplug_setParameterValue
+    // for CLAP_EVENT_PARAM_VALUE events during process(). This keeps
+    // the GUI param_sync queue updated with the latest values from
+    // the host. The events remain in the queue for sample-accurate
+    // processing via ClapProcessContext_dequeueEvent.
+    for (uint32_t i = 0; i < translator.numEvents; ++i)
+    {
+        const clap_event_header_t* hdr = process->in_events->get(process->in_events, i);
+        if (hdr->type == CLAP_EVENT_PARAM_VALUE)
+        {
+            const clap_event_param_value_t* ev = (const clap_event_param_value_t*)hdr;
+            cplug_setParameterValue(clap->userPlugin, ev->param_id, ev->value);
+        }
+    }
+
     cplug_process(clap->userPlugin, &translator.cplugContext);
 
     return CLAP_PROCESS_CONTINUE;
